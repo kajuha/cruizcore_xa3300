@@ -1,0 +1,7 @@
+<launch>
+  <node pkg="cruizcore_xa3300" type="cruizcore_xa3300" name="cruizcore_xa3300" output="screen">
+    <param name="port" value="/dev/ttyUSB0" />
+    <param name="baud_rate" value="115200" />
+  </node>
+  <!--<node pkg="rviz" type="rviz" name="rviz" args="-d $(find cruizcore_xa3300)/rviz_cfg/imu_test.rviz" />-->
+</launch>
