@@ -57,7 +57,7 @@ private:
 	const int SAMPLES = 1000;
 
 	//Define global variables
-	int file_descriptor;
+	int fd;
 	unsigned char data_packet[PACKET_SIZE];
 	int count = 0;
 
@@ -86,10 +86,31 @@ public:
 
 	bool initialize()
 	{
-		if (-1 == (file_descriptor = open(COMM_PORT, O_RDONLY)))
-		{			
+		if(-1 == (fd = open(COMM_PORT, O_RDWR)))
+		{
+			cout << "Error opening port \n";
+			cout << "Set port parameters using the following Linux command:\n stty -F /dev/ttyUSB0 115200 raw\n";
+			cout << "You may need to have ROOT access";
 			return false;
 		}
+
+		struct termios newtio;
+		memset(&newtio, 0, sizeof(newtio));
+
+		newtio.c_cflag = B115200;
+		newtio.c_cflag |= CS8;
+		newtio.c_cflag |= CLOCAL;
+		newtio.c_cflag |= CREAD;
+		newtio.c_iflag = 0;
+		newtio.c_oflag = 0;
+		newtio.c_lflag = 0;
+		newtio.c_cc[VTIME] = 0; 
+		newtio.c_cc[VMIN] = 1; 
+
+		tcflush(fd, TCIFLUSH);
+		tcsetattr(fd, TCSANOW, &newtio);
+
+		cout << "CruizCoreR1350 communication port is ready\n";
 
 		lock_ = PTHREAD_MUTEX_INITIALIZER;
 
@@ -98,118 +119,55 @@ public:
 
 	void closeSensor()
 	{
-		close(file_descriptor);
+		close(fd);
 		cout << "Closing Cruizcore XA 3300 Sensor" << endl;
 	}
 
 	bool receiveData()
 	{
-		unsigned char received_data;
+		short header;
+		short check_sum;
 		
 		// pthread_mutex_lock(&lock_);
-
-		if (read(file_descriptor, &received_data, sizeof(char)) == -1)
-		{
-			cout << "Data read error !!!\n";
+	
+		if (PACKET_SIZE != read(fd, data_packet, PACKET_SIZE)) {
+			cout << "Receive Fail !!!\n";
 			return false;
 		}
 
-			cout << std::hex << (0xFF & received_data) << " ";
-		decodingPacket(received_data);
+		// Verify data packet header 
+		memcpy(&header, data_packet, sizeof(short));
+		if (header != (short)0xFFFF) {
+			cout << "Header error !!!\n";
+			return false;
+		}
+		
+		// Verify data checksum
+		check_sum = data_packet[2];
+		for (int i = 3; i<PACKET_SIZE-1; i++)
+			check_sum ^= data_packet[i];
+		if (check_sum != data_packet[PACKET_SIZE-1])
+		{ 
+			cout<< "Checksum error!!\n";
+			return false;
+		}
+
+		publishTopic();
 
 		// pthread_mutex_unlock(&lock_);
 
 		return true;
 	}
 
-	void decodingPacket(unsigned char data)
-	{
-		if (count > 1)
-		{
-			data_packet[count++] = data;
-			if (count == PACKET_SIZE)
-			{
-				count = 0;
-
-				publishTopic();
-			}
-		}
-		else if (data == 0xFF && count == 0)
-		{
-			data_packet[count++] = data;
-		}
-		else if (data == 0xFF && count == 1)
-		{
-			data_packet[count++] = data;
-		}
-		else
-		{
-			count = 0;
-		}
-	}
-
 	void publishTopic()
 	{
 		XA3300Packet xa3300Packet;
 		memcpy(&xa3300Packet, data_packet, sizeof(XA3300Packet));
-		// cout << "SyncByte : " << xa3300Packet.SyncByte << endl;
-		// cout << "PacketCounter : " << xa3300Packet.PacketCounter << endl;
 
-		short header;
-		char  index;
-		short angle_int;
-		short rate_int;
-		short accel_x_int;
-		short accel_y_int;
-		short accel_z_int;
-		char	Reserved;
-		char	check_sum;
-
-		char	i;
-		char	temp;
-		char	check_sum_cal;
-		float rate_float;
-		float angle_float;
-		float accel_x_float;
-		float accel_y_float;
-		float accel_z_float;
-		// Copy values from data string 
-		// memcpy(&index, data_packet + 2, sizeof(char));
-		// memcpy(&angle_int, data_packet + 3, sizeof(short));
-		// memcpy(&rate_int, data_packet + 5, sizeof(short));
-		// memcpy(&accel_x_int, data_packet + 7, sizeof(short));
-		// memcpy(&accel_y_int, data_packet + 9, sizeof(short));
-		// memcpy(&accel_z_int, data_packet + 11, sizeof(short));
-		// memcpy(&Reserved, data_packet + 13, sizeof(char));
-		// memcpy(&check_sum, data_packet + 41, sizeof(char));
-
-		check_sum_cal = 0;
-
-		for (i = 0; i < 42; i++)
-		{
-			memcpy(&temp, data_packet + i + 0, sizeof(char));
-			int a = temp;
-			// cout << std::hex << (0xFF & temp) << " ";
-			check_sum_cal ^= temp;
-		}
-
-		// Verify data checksum
-		if (check_sum != check_sum_cal)
-		{
-			// cout << "Checksum error!!\n";
-			return;
-		} else {
-			cout << "Success" << endl;
-		}
-
-
-		// Apply scale factors
-		rate_float = rate_int / 100.0;
-		angle_float = angle_int / 100.0;
-		accel_x_float = accel_x_int / 1000.0;
-		accel_y_float = accel_y_int / 1000.0;
-		accel_z_float = accel_z_int / 1000.0;
-
+		// cout << "Rates [deg/sec]: " << fixed << setprecision(3) << setw(8) << xa3300Packet.RateRoll << " " << setw(8) << xa3300Packet.RatePitch << " " << setw(8) << xa3300Packet.RateYaw << endl;
+		// cout << "Accel [m/sec^2]: " << fixed << setprecision(3) << setw(8) << xa3300Packet.AccX << " " << setw(8) << xa3300Packet.AccY << " " << setw(8) << xa3300Packet.AccZ << endl;
+		// cout << "Attitude  [deg]: " << fixed << setprecision(3) << setw(8) << xa3300Packet.DegRoll << " " << setw(8) << xa3300Packet.DegPitch << " " << setw(8) << xa3300Packet.DegYaw << endl;
+	
 		// Publish ROS msgs.
 		sensor_msgs::Imu imu_data_raw_msg;
 		sensor_msgs::Imu imu_data_msg;
@@ -237,9 +195,9 @@ public:
 		static double convertor_r2d = 180.0 / M_PI; // for easy understanding (radian to degree)
 
 		double roll, pitch, yaw;
-		roll = 0.0;
-		pitch = 0.0;
-		yaw = angle_float * convertor_d2r;
+		roll = xa3300Packet.DegRoll * convertor_d2r;
+		pitch = xa3300Packet.DegPitch * convertor_d2r;
+		yaw = xa3300Packet.DegYaw * convertor_d2r;
 
 		// Get Quaternion fro RPY.
 		tf::Quaternion orientation = tf::createQuaternionFromRPY(roll, pitch, yaw);
@@ -260,20 +218,32 @@ public:
 
 		// original data used the g unit, convert to m/s^2
 		imu_data_raw_msg.linear_acceleration.x =
-		imu_data_msg.linear_acceleration.x = accel_x_float;
+		imu_data_msg.linear_acceleration.x = 0;
 		imu_data_raw_msg.linear_acceleration.y =
-		imu_data_msg.linear_acceleration.y = accel_y_float;
+		imu_data_msg.linear_acceleration.y = 0;
 		imu_data_raw_msg.linear_acceleration.z =
-		imu_data_msg.linear_acceleration.z = accel_z_float;
+		imu_data_msg.linear_acceleration.z = 0;
+		imu_data_raw_msg.linear_acceleration.x =
+		imu_data_msg.linear_acceleration.x = xa3300Packet.AccX;
+		imu_data_raw_msg.linear_acceleration.y =
+		imu_data_msg.linear_acceleration.y = xa3300Packet.AccY;
+		imu_data_raw_msg.linear_acceleration.z =
+		imu_data_msg.linear_acceleration.z = xa3300Packet.AccZ;
 
 		// imu.gx gy gz.
 		// original data used the degree/s unit, convert to radian/s
 		imu_data_raw_msg.angular_velocity.x =
-		imu_data_msg.angular_velocity.x = 0.0;
+		imu_data_msg.angular_velocity.x = 0;
 		imu_data_raw_msg.angular_velocity.y =
-		imu_data_msg.angular_velocity.y = 0.0;
+		imu_data_msg.angular_velocity.y = 0;
 		imu_data_raw_msg.angular_velocity.z =
-		imu_data_msg.angular_velocity.z = 0.0;
+		imu_data_msg.angular_velocity.z = 0;
+		imu_data_raw_msg.angular_velocity.x =
+		imu_data_msg.angular_velocity.x = xa3300Packet.RateRoll * convertor_d2r;
+		imu_data_raw_msg.angular_velocity.y =
+		imu_data_msg.angular_velocity.y = xa3300Packet.RatePitch * convertor_d2r;
+		imu_data_raw_msg.angular_velocity.z =
+		imu_data_msg.angular_velocity.z = xa3300Packet.RateYaw * convertor_d2r;
 
 		// publish the IMU data
 		imu_data_raw_pub_.publish(imu_data_raw_msg);
@@ -283,10 +253,6 @@ public:
 		broadcaster_.sendTransform(tf::StampedTransform(tf::Transform(tf::createQuaternionFromRPY(roll, pitch, yaw),
 			tf::Vector3(0.0, 0.0, 0.0)),
 			ros::Time::now(), parent_frame_id_, frame_id_));
-
-		// publish
-		//cout << "rate:" << rate_float << " [deg/sec]\t angle:" << angle_float << " [deg]\n";
-		//cout << "accel_x:" << accel_x_float << " [m/sec^2]\t accel_y:" << accel_y_float << " [m/sec^2]\t accel_z:" << accel_z_float << " [m/sec^2]\n";
 	}
 
 };
@@ -317,7 +283,7 @@ int main(int argc, char* argv[])
     ROS_INFO("CruizCore XA 3300 Initialization OK!\n");
   }
 
-  ros::Rate loop_rate(100);
+  // ros::Rate loop_rate(10);
 
   while (ros::ok())
   {
