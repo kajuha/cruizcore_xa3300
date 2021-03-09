@@ -105,7 +105,9 @@ public:
 		newtio.c_oflag = 0;
 		newtio.c_lflag = 0;
 		newtio.c_cc[VTIME] = 0; 
-		newtio.c_cc[VMIN] = 1; 
+		// kajuha 20210302
+		// newtio.c_cc[VMIN] = 1; 
+		newtio.c_cc[VMIN] = 0; 
 
 		tcflush(fd, TCIFLUSH);
 		tcsetattr(fd, TCSANOW, &newtio);
@@ -165,7 +167,7 @@ public:
 		memcpy(&xa3300Packet, data_packet, sizeof(XA3300Packet));
 
 		// cout << "Rates [deg/sec]: " << fixed << setprecision(3) << setw(8) << xa3300Packet.RateRoll << " " << setw(8) << xa3300Packet.RatePitch << " " << setw(8) << xa3300Packet.RateYaw << endl;
-		// cout << "Accel [m/sec^2]: " << fixed << setprecision(3) << setw(8) << xa3300Packet.AccX << " " << setw(8) << xa3300Packet.AccY << " " << setw(8) << xa3300Packet.AccZ << endl;
+		cout << "Accel [m/sec^2]: " << fixed << setprecision(3) << setw(8) << xa3300Packet.AccX << " " << setw(8) << xa3300Packet.AccY << " " << setw(8) << xa3300Packet.AccZ << endl;
 		// cout << "Attitude  [deg]: " << fixed << setprecision(3) << setw(8) << xa3300Packet.DegRoll << " " << setw(8) << xa3300Packet.DegPitch << " " << setw(8) << xa3300Packet.DegYaw << endl;
 	
 		// Publish ROS msgs.

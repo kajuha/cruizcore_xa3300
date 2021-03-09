@@ -64,7 +64,9 @@ bool xa3300_init()
 	newtio.c_oflag = 0;
 	newtio.c_lflag = 0;
 	newtio.c_cc[VTIME] = 0; 
-	newtio.c_cc[VMIN] = 1; 
+	// kajuha 20210302
+	// newtio.c_cc[VMIN] = 1; 
+	newtio.c_cc[VMIN] = 0; 
 
 	tcflush(fd, TCIFLUSH);
 	tcsetattr(fd, TCSANOW, &newtio);
