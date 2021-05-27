@@ -1,7 +1,7 @@
 <launch>
-  <arg name="output_type" default="screen" doc="output type"/>
+  <arg name="message_display" default="screen" doc="output type"/>
 
-  <node pkg="cruizcore_xa3300" type="cruizcore_xa3300" name="cruizcore_xa3300" output="$(arg output_type)">
+  <node pkg="cruizcore_xa3300" type="cruizcore_xa3300" name="cruizcore_xa3300" output="$(arg message_display)">
     <param name="port" value="/dev/ttyUSB0" />
     <param name="baud_rate" value="115200" />
   </node>
